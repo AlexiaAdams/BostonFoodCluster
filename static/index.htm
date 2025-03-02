@@ -1,0 +1,995 @@
+<html>
+
+<head>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://d3js.org/topojson.v3.min.js"></script>
+
+
+  <style>
+    #map {
+      border: 2px solid black;
+    }
+
+    #legend-container {
+      border: 2px solid black;
+      border-left: none
+    }
+
+    .row {
+      display: flex;
+      flex-direction: row;
+    }
+
+    .larger {
+      font-size: larger;
+    }
+
+    #filter-buttons {
+      margin-left: 3%
+    }
+
+    select {
+      width: 200px;
+    }
+
+    #showCuisines,
+    #showFoods,
+    #showAmbiences,
+    #showDiets {
+      width: 350px;
+    }
+
+    #legend-text {
+      padding-left: 1%;
+      padding-right: 1%;
+      text-align: center;
+    }
+
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+      margin: auto;
+    }
+
+    #colorOps li {
+      width: 100%;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 4%;
+      border: 1px solid black;
+      padding-left: 3%;
+      padding-right: 3%;
+      border-radius: 10px;
+    }
+
+    .head-ops h2 {
+      width: 50%;
+      text-align: center;
+      border: 1px solid black;
+      border-radius: 20px;
+    }
+
+    .selectedOp {
+      /* background-color: #b2b2b2; */
+      /* border-color: blue */
+      background-color: #5c5cf1;
+      color: white
+    }
+
+    #cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .card {
+      border: 2px solid black;
+      border-bottom: 1px solid black;
+      border-radius: 5%;
+      padding-left: 2%;
+      padding-right: 2%;
+      margin-bottom: 5%;
+      box-shadow: 0 4px 8px 0 #00000033;
+      transition: 0.3s;
+      margin-left: 1%;
+      margin-right: 1%;
+    }
+
+    .card:hover {
+      box-shadow: 0 8px 16px 0 #00000033;
+    }
+
+    .interactable {
+      cursor: pointer;
+    }
+  </style>
+
+</head>
+
+<body>
+  <h1>Do You Offer Chowda Here?</h1>
+
+  <p class="larger">
+    Boston has a plethora of diverse and interesting restaurants in and around the city.
+  </p>
+
+  <br>
+
+  <div class="row">
+    <svg id="map" width="700" height="800"></svg>
+
+    <div id="legend-container">
+      <div id="legend-text">
+        <h2>Boston Cluster Map</h2>
+        <p>Select Your Color Scale</p>
+        <div class="row">
+          <ul id="colorOps">
+            <li id="opTS" class="selectedOp">Total Score</li> <!-- The scores summed across the cluster-->
+            <li id="opAS">Average Score</li> <!-- The scores averaged across the cluster-->
+            <li id="opAR">Average Rating</li> <!-- The ratings averaged across the cluster-->
+          </ul>
+        </div>
+
+      </div>
+      <svg id="legend" width="300" height="600"></svg>
+    </div>
+
+    <div id="filter-buttons">
+      <!-- <div>
+        <p>Reset All</p>
+      </div> -->
+      <h3>Cuisines</h3>
+      <select multiple id="selectCuisine">
+      </select>
+      <p id="showCuisines">Selected: </p>
+      <!-- <br> -->
+
+      <h3>Food</h3>
+      <select multiple id="selectFood">
+      </select>
+      <p id="showFoods">Selected: </p>
+      <!-- <br> -->
+
+      <h3>Ambience</h3>
+      <select multiple id="selectAmbience">
+      </select>
+      <p id="showAmbiences">Selected: </p>
+      <!-- <br> -->
+
+      <h3>Dietary Restrictions</h3>
+      <select multiple id="selectDiet">
+      </select>
+      <p id="showDiets">Selected: </p>
+    </div>
+  </div>
+
+  <div id="card-holder">
+    <div class="row head-ops interactable">
+      <h2 id="opHS" class="selectedOp">Highest Score</h2>
+      <h2 id="opHR">Highest Rating</h2>
+    </div>
+    <p>Here are the relevant restaurants sorted by highest score!</p>
+    <div id="cards">
+
+    </div>
+  </div>
+
+  <script>
+    const svg = d3.select("#map");
+    const width = svg.attr("width");
+    const height = svg.attr("height");
+    const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    const mapChart = svg.append("g")
+      .attr("id", "mapChart")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const legend = d3.select("#legend");
+    const legW = legend.attr("width")
+    const legH = legend.attr("height")
+    const legMargin = { top: 10, right: 10, bottom: 10, left: 10 }
+    const legendWidth = legW - legMargin.left - legMargin.right
+    const legendHeight = legH - legMargin.top - legMargin.bottom
+    const legendChart = legend.append("g")
+      .attr("id", "legendChart")
+      .attr("transform", `translate(${legMargin.left},${legMargin.top})`)
+
+    const requestData = async function () {
+      const boston = await d3.csv("yelp_boston.csv");
+
+      // Category Segments
+      let cuisines = [
+        "Mexican", "Japanese", "Italian", "American (New)", "Mediterranean",
+        "Spanish", "Indian", "American (Traditional)", "Korean",
+        "Asian Fusion", "French", "Vietnamese", "Turkish",
+        "Pakistani", "Bangladeshi", "Himalayan/Nepalese", "Chinese",
+        "Mongolian", "Cantonese", "Latin American", "Thai", "Greek", "Armenian",
+        "Middle Eastern", "Polish", "Ethnic Food", "Ukrainian"
+      ].sort(d3.ascending)
+      // "Belgian", "Halal"
+
+      let foods = [
+        "Breakfast & Brunch", "Burgers", "Sandwiches", "Pizza", "Seafood",
+        "Live/Raw Food", "Tapas/Small Plates", "Salad", "Coffee & Tea",
+        "Desserts", "Bubble Tea", "Cheesesteaks", "Falafel", "Hot Pot", "Ramen",
+        "Dim Sum", "Ice Cream & Frozen Yogurt", "Donuts", "Cupcakes"
+      ].sort(d3.ascending)
+      let styles = [
+        "Wine Bars", "Juice Bars & Smoothies", "Pubs",
+        "Lounges", "Cafes", "Delis", "Steakhouses", "Grocery", "Bakeries", "Gastropubs", "Bars",
+        "Cocktail Bars", "Cheese Shops", "Sushi Bars", "Food Stands",
+        "Caterers", "Diners", "Fast Food", "Food Trucks", "Shopping"
+      ].sort(d3.ascending)
+      let diets = ["Vegan", "Gluten-Free", "Vegetarian"].sort(d3.ascending)
+
+      // Pre-processing the data
+      boston.forEach((d) => {
+        // Also some duplicates in data
+        // 77 restaurants have no neighborhood
+        if (d["neighborhood"] === "") {
+          if (JSON.parse(d["location_json"])["city"] !== "Boston") {
+            d["neighborhood"] = JSON.parse(d["location_json"])["city"]
+          }
+          if (d["name"] == "Bonne Chance Cafe & Bakery") {
+            d["neighborhood"] = "West End"
+          }
+        }
+
+        // Categories
+        if (d["neighborhood"] !== "") {
+          let categories_arr = JSON.parse(d["categories_json"])
+          let categories = []
+          for (let i = 0; i < categories_arr.length; i++) {
+            categories.push(categories_arr[i][0])
+          }
+          d["categories"] = categories
+
+          // Review Scores
+          d["score"] = d["rating"] * d["review_count"]
+        }
+
+      })
+
+      // --- Creating Cluster Map ---
+      let radius = 35
+
+      const hood2Abb = {
+        // Southern Segment
+        "North End": "NE",
+        "West End": "WE",
+        "Beacon Hill": "Beacon",
+        "Chinatown": "Chinatown",
+        "Downtown": "Downtown",
+        "Waterfront": "WF",
+        "Financial District": "FD",
+        "Back Bay": "BB",
+        "South End": "SE",
+        "South Boston": "SB",
+        "Fenway": "FW",
+        "Mission Hill": "MH",
+        "Jamaica Plain": "JP",
+        "Allston/Brighton": "AB",
+        "Coolidge Corner": "Coolidge",
+        "West Roxbury": "WR",
+        "Dorchester": "DC",
+        "Quincy": "Quincy",
+        "Brookline": "BL",
+        "Newton": "Netwon",
+        // Northeastern Segment
+        "East Boston": "EB",
+        "Chelsea": "Chel",
+        "Everett": "Ever",
+        "Malden": "Mald",
+        "Medford": "Med",
+        "Revere": "Rev",
+        "Saugus": "Saugus",
+        // Northwestern Segment
+        "Charlestown": "Cha",
+        "Kendall Square/MIT": "MIT",
+        "Inman Square": "IS",
+        "Harvard Square": "Harvard",
+        "Porter Square": "PS",
+        "North Cambridge": "NCam",
+        "Teele Square": "TS",
+        "Cambridge": "Cam",
+        "Somerville": "Somer",
+        "Belmont": "Bel",
+        "Watertown": "WT"
+      }
+
+      let lean = 40
+
+      const hood2X = {
+        // Southern Segment
+        "North End": chartWidth / 2 + 60 + lean,
+        "West End": chartWidth / 2 + 10 + lean,
+        "Beacon Hill": chartWidth / 2 - 40 + lean,
+        "Chinatown": chartWidth / 2 + 60 + lean,
+        "Downtown": chartWidth / 2 + 110 + lean,
+        "Waterfront": chartWidth / 2 + 160 + lean,
+        "Financial District": chartWidth / 2 + 210 + lean,
+        "Back Bay": chartWidth / 2 + 10 + lean,
+        "South End": chartWidth / 2 + 110 + lean,
+        "South Boston": chartWidth / 2 + 210 + lean,
+        "Fenway": chartWidth / 2 - 90 + lean,
+        "Mission Hill": chartWidth / 2 - 140 + lean,
+        "Jamaica Plain": chartWidth / 2 - 190 + lean,
+        "Allston/Brighton": chartWidth / 2 - 290 + lean,
+        "Coolidge Corner": chartWidth / 2 - 190 + lean,
+        "West Roxbury": chartWidth / 2 - 240 + lean,
+        "Dorchester": chartWidth / 2 + 160 + lean,
+        "Quincy": chartWidth / 2 + 210 + lean,
+        "Brookline": chartWidth / 2 - 240 + lean,
+        "Newton": chartWidth / 2 - 340 + lean,
+        // Northeastern Segment
+        "East Boston": chartWidth / 2 + 260 + lean,
+        "Chelsea": chartWidth / 2 + 210 + lean,
+        "Everett": chartWidth / 2 + 160 + lean,
+        "Malden": chartWidth / 2 + 110 + lean,
+        "Medford": chartWidth / 2 + 10 + lean,
+        "Revere": chartWidth / 2 + 260 + lean,
+        "Saugus": chartWidth / 2 + 210 + lean,
+        // Northwestern Segment
+        "Charlestown": chartWidth / 2 + 10 + lean,
+        "Kendall Square/MIT": chartWidth / 2 - 40 + lean,
+        "Inman Square": chartWidth / 2 - 90 + lean,
+        "Harvard Square": chartWidth / 2 - 140 + lean,
+        "Porter Square": chartWidth / 2 - 140 + lean,
+        "North Cambridge": chartWidth / 2 - 240 + lean,
+        "Teele Square": chartWidth / 2 - 190 + lean,
+        "Cambridge": chartWidth / 2 - 90 + lean,
+        "Somerville": chartWidth / 2 - 40 + lean,
+        "Belmont": chartWidth / 2 - 340 + lean,
+        "Watertown": chartWidth / 2 - 290 + lean,
+      }
+
+      let lift = -25
+
+      const hood2Y = {
+        // Southern Segment
+        "North End": chartHeight / 2 - 50 + lift,
+        "West End": chartHeight / 2 + 20 + lift,
+        "Beacon Hill": chartHeight / 2 + 90 + lift,
+        "Chinatown": chartHeight / 2 + 90 + lift,
+        "Downtown": chartHeight / 2 + 20 + lift,
+        "Waterfront": chartHeight / 2 + 90 + lift,
+        "Financial District": chartHeight / 2 + 20 + lift,
+        "Back Bay": chartHeight / 2 + 160 + lift,
+        "South End": chartHeight / 2 + 160 + lift,
+        "South Boston": chartHeight / 2 + 160 + lift,
+        "Fenway": chartHeight / 2 + 160 + lift,
+        "Mission Hill": chartHeight / 2 + 230 + lift,
+        "Jamaica Plain": chartHeight / 2 + 300 + lift,
+        "Allston/Brighton": chartHeight / 2 + 160 + lift,
+        "Coolidge Corner": chartHeight / 2 + 160 + lift,
+        "West Roxbury": chartHeight / 2 + 370 + lift,
+        "Dorchester": chartHeight / 2 + 230 + lift,
+        "Quincy": chartHeight / 2 + 300 + lift,
+        "Brookline": chartHeight / 2 + 230 + lift,
+        "Newton": chartHeight / 2 + 230 + lift,
+        // Northeastern Segment
+        "East Boston": chartHeight / 2 - 120 + lift,
+        "Chelsea": chartHeight / 2 - 190 + lift,
+        "Everett": chartHeight / 2 - 260 + lift,
+        "Malden": chartHeight / 2 - 330 + lift,
+        "Medford": chartHeight / 2 - 330 + lift,
+        "Revere": chartHeight / 2 - 260 + lift,
+        "Saugus": chartHeight / 2 - 330 + lift,
+        // Northwestern Segment
+        "Charlestown": chartHeight / 2 - 190 + lift,
+        "Kendall Square/MIT": chartHeight / 2 - 120 + lift,
+        "Inman Square": chartHeight / 2 - 330 + lift,
+        "Harvard Square": chartHeight / 2 - 120 + lift,
+        "Porter Square": chartHeight / 2 - 260 + lift,
+        "North Cambridge": chartHeight / 2 - 260 + lift,
+        "Teele Square": chartHeight / 2 - 330 + lift,
+        "Cambridge": chartHeight / 2 - 190 + lift,
+        "Somerville": chartHeight / 2 - 260 + lift,
+        "Belmont": chartHeight / 2 - 260 + lift,
+        "Watertown": chartHeight / 2 - 190 + lift,
+      }
+
+      console.log(boston)
+
+      // IMPORTANT variables
+      let selectedCluster = []
+      // colorType can be "Total Score", "Avg Score", "Avg Rating"
+      let colorType = "Total Score"
+      // sortType can be "High Score", "High Rating"
+      let sortType = "High Score"
+      let cuisineFilters = []
+      let foodFilters = []
+      let ambienceFilters = []
+      let dietFilters = []
+
+      let subData = boston.filter((d) => {
+        return d.neighborhood !== ""
+      })
+
+      let totScoreDct = {}
+      let totRateDct = {}
+
+      let avgScoreDct = {}
+      let avgRateDct = {}
+
+      function updateMap() {
+        d3.selectAll("circle.remove").remove()
+        d3.selectAll("text.remove").remove()
+        d3.selectAll(".legendRemove").remove()
+
+        let filteredData = subData.filter((d) => {
+          let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
+            | ambienceFilters.length > 0 | dietFilters.length > 0
+
+          let filterBool = applyFilters(d)
+
+          if (filterON) {
+            return filterBool
+          }
+          return true
+        })
+
+        totScoreDct = {}
+        totRateDct = {}
+
+        avgScoreDct = {}
+        avgRateDct = {}
+
+        filteredData.forEach((d) => {
+          if (d.neighborhood in totScoreDct) {
+            totScoreDct[d.neighborhood] = totScoreDct[d.neighborhood] + d.score
+            totRateDct[d.neighborhood] = totRateDct[d.neighborhood] + Number(d.rating)
+
+            avgScoreDct[d.neighborhood] = avgScoreDct[d.neighborhood] + 1
+            avgRateDct[d.neighborhood] = avgRateDct[d.neighborhood] + 1
+          } else {
+            totScoreDct[d.neighborhood] = d.score
+            totRateDct[d.neighborhood] = Number(d.rating)
+
+            avgScoreDct[d.neighborhood] = 1
+            avgRateDct[d.neighborhood] = 1
+          }
+        })
+
+        for (let i = 0; i < Object.keys(totScoreDct).length; i++) {
+          avgScoreDct[Object.keys(totScoreDct)[i]] = totScoreDct[Object.keys(totScoreDct)[i]] / avgScoreDct[Object.keys(totScoreDct)[i]]
+
+          avgRateDct[Object.keys(totScoreDct)[i]] = totRateDct[Object.keys(totScoreDct)[i]] / avgRateDct[Object.keys(totScoreDct)[i]]
+        }
+        console.log(avgRateDct)
+
+        // default is Total Score
+        let scoreExtent = d3.extent(Object.values(totScoreDct))
+        let colors = d3.interpolateBlues
+
+        if (colorType == "Avg Score") {
+          scoreExtent = d3.extent(Object.values(avgScoreDct))
+          colors = d3.interpolateOranges
+
+        }
+
+        if (colorType == "Avg Rating") {
+          scoreExtent = d3.extent(Object.values(avgRateDct))
+          colors = d3.interpolateGreens
+        }
+
+        let midpoint = (scoreExtent[1] + scoreExtent[0]) / 2
+
+        let scoreColors = d3.scaleSequential(colors)
+          .domain(scoreExtent);
+
+        let boxHeight = 400
+        let boxWidth = 50
+
+        let legendScale = d3.scaleLinear()
+          .domain(scoreExtent)
+          .range([boxHeight, 0])
+
+        let leftAxis = d3.axisLeft(legendScale).ticks(6)
+
+        legend.append("g")
+          .attr("class", "legendRemove")
+          .attr("transform", `translate(${legendWidth / 2 - boxWidth / 4},${legendHeight / 8})`)
+          .call(leftAxis)
+
+        let defs = legend.append("defs")
+          .append("linearGradient")
+          .attr("id", "tempGradient")
+          .attr("class", "legendRemove")
+          .attr("x1", "0%")
+          .attr("y1", "100%")
+          .attr("x2", "0%")
+          .attr("y2", "0%");
+
+        defs.selectAll("stop")
+          .data(scoreColors.ticks()
+            .map((c, i, n) => (
+              {
+                offset: `${100 * i / n.length}%`,
+                color: scoreColors(c)
+              }
+            ))
+          )
+          .join("stop")
+          .attr("offset", d => d.offset)
+          .attr("stop-color", d => d.color);
+
+        legend.append("rect")
+          .attr("id", "legendColorScale")
+          .attr("class", "legendRemove")
+          .attr("x", legendWidth / 2 - boxWidth / 4)
+          .attr("y", legendHeight / 8)
+          .attr("width", boxWidth)
+          .attr("height", boxHeight)
+          .style("stroke", "black")
+          .style("fill", "url(#tempGradient)");
+
+        legend.append("rect")
+          .attr("id", "no-data")
+          .attr("class", "legendRemove")
+          .attr("x", legendWidth / 2 - boxWidth / 4)
+          .attr("y", legendHeight / 8 + boxHeight + 20)
+          .attr("width", boxWidth / 2)
+          .attr("height", boxWidth / 2)
+          .style("fill", "gray")
+          .style("stroke", "black")
+
+        legend.append("text")
+          .text("No Data")
+          .attr("class", "legendRemove")
+          .attr("x", legendWidth / 2 - boxWidth / 4 - boxWidth - 10)
+          .attr("y", legendHeight / 8 + boxHeight + 3 * boxWidth / 4)
+
+        // Creating circles
+        for (let i = 0; i < Object.keys(hood2Abb).length; i++) {
+
+          // Applying filters to each cluster of data
+          let clusterData = subData.filter((d) => {
+
+            let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
+              | ambienceFilters.length > 0 | dietFilters.length > 0
+
+            let filterBool = applyFilters(d)
+
+            if (filterON) {
+              return d.neighborhood === Object.keys(hood2Abb)[i] & filterBool
+            }
+            return d.neighborhood === Object.keys(hood2Abb)[i]
+          })
+
+          // default is Total Score
+          let summedScore = totScoreDct[Object.keys(hood2Abb)[i]]
+          if (colorType == "Avg Score") {
+            summedScore = avgScoreDct[Object.keys(hood2Abb)[i]]
+          }
+          if (colorType == "Avg Rating") {
+            summedScore = avgRateDct[Object.keys(hood2Abb)[i]]
+          }
+
+          mapChart.append("circle")
+            .style("stroke", d => {
+              if (selectedCluster.indexOf(hood2Abb[Object.keys(hood2Abb)[i]]) !== -1) { return "red" } else { return "black" }
+            })
+            .style("stroke-width", 2)
+            .attr("cx", hood2X[Object.keys(hood2Abb)[i]])
+            .attr("cy", hood2Y[Object.keys(hood2Abb)[i]])
+            .attr("r", radius)
+            .attr("id", hood2Abb[Object.keys(hood2Abb)[i]])
+            .on("mouseover", clusterMouseOver)
+            .on("mouseout", clusterMouseOut)
+            .on("click", clusterMouseChange)
+            .attr("class", "interactable remove")
+            .style("fill", d => { if (clusterData.length == 0) { return "gray" } else { return scoreColors(summedScore) } })
+
+          mapChart.append("text")
+            .text(clusterData.length)
+            .attr("x", hood2X[Object.keys(hood2Abb)[i]])
+            .attr("y", hood2Y[Object.keys(hood2Abb)[i]] - 5)
+            .attr("text-anchor", "middle")
+            .attr("alignment-baseline", "hanging")
+            .style("fill", d => { if (summedScore >= midpoint) { return "white" } else { "black" } })
+            .attr("id", hood2Abb[Object.keys(hood2Abb)[i]] + "-text")
+            .on("mouseover", clusterMouseOver)
+            .on("mouseout", clusterMouseOut)
+            .on("click", clusterMouseChange)
+            .attr("class", "interactable remove")
+        }
+      }
+      updateMap()
+
+      // Mouse over for clusters
+      function clusterMouseOver() {
+        toolTip.style("visibility", "visible");
+
+        let name = this.id
+        if (name.includes("-text")) {
+          name = this.id.split("-")[0]
+        }
+
+        let key = Object.keys(hood2Abb).find(k => hood2Abb[k] === name);
+
+        hoodText.text(key)
+
+        let clusterData = subData.filter((d) => {
+
+          let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
+            | ambienceFilters.length > 0 | dietFilters.length > 0
+
+          let filterBool = applyFilters(d)
+
+          if (filterON) {
+            return d.neighborhood === key & filterBool
+          }
+          return d.neighborhood === key
+        })
+        let format = d3.format(",.2f")
+
+        let numRel = clusterData.length
+        relText.text("Found " + numRel + " relevant places!")
+
+        if (colorType == "Total Score") {
+          scoreText.text("Total Score: " + format(totScoreDct[key]))
+        }
+        if (colorType == "Avg Score") {
+          scoreText.text("Average Score: " + format(avgScoreDct[key]))
+        }
+        if (colorType == "Avg Rating") {
+          scoreText.text("Average Rating: " + format(avgRateDct[key]))
+        }
+
+        if (selectedCluster.indexOf(name) === -1) {
+          d3.select("#" + name)
+            .style("stroke", "orange")
+
+        }
+      }
+
+      // Mouse out for clusters
+      function clusterMouseOut() {
+        toolTip.style("visibility", "hidden");
+
+        let name = this.id
+        if (this.id.includes("-text")) {
+          name = this.id.split("-")[0]
+        }
+
+        if (selectedCluster.indexOf(name) === -1) {
+          d3.select("#" + name)
+            .style("stroke", "black")
+        }
+      }
+
+      // Mouse change/click for clusters
+      function clusterMouseChange() {
+        let name = this.id
+        if (this.id.includes("-text")) {
+          name = this.id.split("-")[0]
+        }
+        let currCluster = d3.select("#" + name)
+
+        if (selectedCluster.length == 0) {
+          currCluster.style("stroke", "red")
+
+          selectedCluster = [name]
+        } else {
+          if (selectedCluster.indexOf(name) === -1) {
+            d3.select("#" + selectedCluster[0])
+              .style("stroke", "black")
+
+            currCluster.style("stroke", "red")
+            selectedCluster = [name]
+          } else {
+            selectedCluster = []
+          }
+        }
+        console.log("After change", selectedCluster)
+
+        d3.selectAll("div.remove").remove()
+        displayCards()
+      }
+
+      // Tooltip
+      let toolTipWidth = 200
+      let toolTipHeight = 100
+
+      let toolTip = mapChart.append("g")
+        .attr("class", "tooltip")
+        .attr("visibility", "hidden");
+
+      let xPos = margin.left
+      let yPos = chartHeight / 2 - 75
+
+      toolTip.append("rect")
+        .attr("fill", "black")
+        .attr("opacity", .8)
+        .attr("rx", 6)
+        .attr("ry", 6)
+        .attr("x", xPos)
+        .attr("y", yPos)
+        .attr("width", toolTipWidth)
+        .attr("height", toolTipHeight);
+
+      let hoodText = toolTip.append("text")
+        .attr("fill", "white")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", xPos + (toolTipWidth / 2))
+        .attr("y", yPos + 10)
+
+      let relText = toolTip.append("text")
+        .attr("fill", "white")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", xPos + (toolTipWidth / 2))
+        .attr("y", yPos + 40)
+
+      let scoreText = toolTip.append("text")
+        .attr("fill", "white")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", xPos + (toolTipWidth / 2))
+        .attr("y", yPos + 70)
+
+      // Displays relevant places from selected cluster
+      function displayCards() {
+        let key = Object.keys(hood2Abb).find(k => hood2Abb[k] === selectedCluster[0]);
+
+        let newData = subData.filter((d) => {
+          let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
+            | ambienceFilters.length > 0 | dietFilters.length > 0
+
+          if (filterON) {
+            return d.neighborhood === key & applyFilters(d)
+          }
+          return d.neighborhood === key
+        })
+
+        if (sortType == "High Score") {
+          newData = d3.sort(newData, (a, b) => d3.descending(a.score, b.score))
+        }
+        if (sortType == "High Rating") {
+          newData = d3.sort(newData, (a, b) => d3.descending(a.rating, b.rating))
+        }
+
+        console.log("Card Data", newData)
+        // ISSUE - cards are not in sort order
+
+        let cardDeck = d3.select("#cards")
+
+        let cards = cardDeck.selectAll(".card")
+          .data(newData)
+          .enter()
+          .append("div")
+          .attr("class", "card remove")
+
+        cards.append("h3")
+          .text(d => d.name)
+
+        cards.append("p")
+          .text(d => d.categories.join(', '))
+
+        let totScore = cards.append("p")
+          .text(d => "Total Score: " + d.score)
+
+        let starRate = cards.append("p")
+          .text(d => d.rating + " Stars")
+
+        if (sortType === "High Score") {
+          totScore.style("font-weight", "bold");
+        }
+        if (sortType === "High Rating") {
+          starRate.style("font-weight", "bold");
+        }
+
+        cards.append("p")
+          .text(d => d["snippet_text"])
+
+        cards.append("p")
+          .text(d => JSON.parse(d["location_json"])["display_address"].join(', '))
+
+      }
+
+      // Dropdown/MultiSelect Menus
+      let cuiDrop = d3.select("#selectCuisine")
+
+      cuiDrop.selectAll('.cuiOption')
+        .data(cuisines)
+        .enter()
+        .append('option')
+        .text(d => d)
+        .attr("value", d => d)
+        .attr("class", "cuiOption")
+        .on("click", showSelected)
+
+      let foodDrop = d3.select("#selectFood")
+
+      foodDrop.selectAll('.foodOption')
+        .data(foods)
+        .enter()
+        .append('option')
+        .text(d => d)
+        .attr("value", d => d)
+        .attr("class", "foodOption")
+        .on("click", showSelected)
+
+      let ambDrop = d3.select("#selectAmbience")
+
+      ambDrop.selectAll('.ambOption')
+        .data(styles)
+        .enter()
+        .append('option')
+        .text(d => d)
+        .attr("value", d => d)
+        .attr("class", "ambOption")
+        .on("click", showSelected)
+
+      let dietDrop = d3.select("#selectDiet")
+
+      dietDrop.selectAll('.dietOption')
+        .data(diets)
+        .enter()
+        .append('option')
+        .text(d => d)
+        .attr("value", d => d)
+        .attr("class", "dietOption")
+        .on("click", showSelected)
+
+      // Updates and Displays filters
+      function showSelected() {
+        let val = d3.select(this).property('value')
+
+        if (cuisines.indexOf(val) !== -1) {
+          cuisineFilters = updateFilters("#selectCuisine", cuisineFilters)
+        }
+        if (foods.indexOf(val) !== -1) {
+          foodFilters = updateFilters("#selectFood", foodFilters)
+        }
+        if (styles.indexOf(val) !== -1) {
+          ambienceFilters = updateFilters("#selectAmbience", ambienceFilters)
+        }
+        if (diets.indexOf(val) !== -1) {
+          dietFilters = updateFilters("#selectDiet", dietFilters)
+        }
+
+        d3.select("#showCuisines")
+          .text("Selected: " + cuisineFilters.join(', '))
+
+        d3.select("#showFoods")
+          .text("Selected: " + foodFilters.join(', '))
+
+        d3.select("#showAmbiences")
+          .text("Selected: " + ambienceFilters.join(', '))
+
+        d3.select("#showDiets")
+          .text("Selected: " + dietFilters.join(', '))
+
+        updateMap()
+        d3.selectAll("div.remove").remove()
+        displayCards()
+
+      }
+
+      // Updates values in the filters
+      function updateFilters(selectID, filterList) {
+        console.log("UPDATE FILTERS")
+        let selector = d3.selector = d3.select(selectID)
+
+        let selectedOptions = selector.selectAll("option")
+          .filter(function (d) {
+            return this.selected
+          })
+
+        let lengthFilters = selectedOptions._groups[0].length
+
+        filterList = []
+        for (let i = 0; i < lengthFilters; i++) {
+          let a = selectedOptions._groups[0][i].text
+          filterList.push(a)
+        }
+        return filterList
+      }
+
+      function applyFilters(d) {
+        let cuisineBool = false
+        let foodBool = false
+        let ambBool = false
+        let dietBool = false
+
+        for (let i = 0; i < cuisineFilters.length; i++) {
+          cuisineBool = cuisineBool | d.categories.indexOf(cuisineFilters[i]) !== -1
+        }
+
+        for (let i = 0; i < foodFilters.length; i++) {
+          foodBool = foodBool | d.categories.indexOf(foodFilters[i]) !== -1
+        }
+
+        for (let i = 0; i < ambienceFilters.length; i++) {
+          ambBool = ambBool | d.categories.indexOf(ambienceFilters[i]) !== -1
+        }
+
+        for (let i = 0; i < dietFilters.length; i++) {
+          dietBool = dietBool | d.categories.indexOf(dietFilters[i]) !== -1
+        }
+
+        let filterBool = (cuisineBool | foodBool | ambBool | dietBool)
+        return filterBool
+      }
+
+      // Buttons to change color scale
+      let opTS = d3.select("#opTS")
+      let opAS = d3.select("#opAS")
+      let opAR = d3.select("#opAR")
+
+      opTS.on("click", function () {
+        if (opTS.classed("selectedOp", false)) {
+          opTS.classed("selectedOp", true)
+          opAS.classed("selectedOp", false)
+          opAR.classed("selectedOp", false)
+
+          colorType = "Total Score"
+          updateMap()
+        }
+      })
+
+      opAS.on("click", function () {
+        if (opAS.classed("selectedOp", false)) {
+          opAS.classed("selectedOp", true)
+          opAR.classed("selectedOp", false)
+          opTS.classed("selectedOp", false)
+
+          colorType = "Avg Score"
+          updateMap()
+        }
+      })
+
+      opAR.on("click", function () {
+        if (opAR.classed("selectedOp", false)) {
+          opAR.classed("selectedOp", true)
+          opAS.classed("selectedOp", false)
+          opTS.classed("selectedOp", false)
+
+          colorType = "Avg Rating"
+          updateMap()
+        }
+      })
+
+      // Buttons to change sorting
+      let opHS = d3.select("#opHS")
+      let opHR = d3.select("#opHR")
+
+      opHS.on("click", function () {
+        console.log("CLICKED")
+        if (opHS.classed("selectedOp", false)) {
+          console.log("IF")
+
+          opHS.classed("selectedOp", true)
+          opHR.classed("selectedOp", false)
+
+          sortType = "High Score"
+          d3.selectAll("div.remove").remove()
+          displayCards()
+        }
+      })
+
+      opHR.on("click", function () {
+        console.log("CLICKED")
+        if (opHR.classed("selectedOp", false)) {
+          console.log("IF")
+
+          opHR.classed("selectedOp", true)
+          opHS.classed("selectedOp", false)
+
+          sortType = "High Rating"
+          d3.selectAll("div.remove").remove()
+          displayCards()
+        }
+      })
+
+    }
+
+    requestData()
+
+  </script>
+</body>
+
+</html>
