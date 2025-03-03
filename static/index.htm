@@ -119,11 +119,14 @@
     <strong class="larger">Boston</strong> has a plethora of diverse and interesting restaurants in and around the city.
   </p>
   <p>
-    <em>Each cluster is a neighborhood either in or near Boston. Hover over each cluster to show more details. The
-      number in the cluster represents the number of relevant restaurants based on the filters.</em>
+    <em>Each circle is a neighborhood either in or near Boston. Hover over each circle to show more details. The
+      number in the circle represents the number of relevant restaurants based on the filters.</em>
   </p>
   <p>
     <em>For Mac users, use command while you click to select multiple filter options.</em>
+  </p>
+  <p>
+    <em>Click on a circle and scroll down to view details on the relevant restaurants.</em>
   </p>
 
   <br>
@@ -633,11 +636,9 @@
         }
 
         let key = Object.keys(hood2Abb).find(k => hood2Abb[k] === name);
-
         hoodText.text(key)
 
         let clusterData = subData.filter((d) => {
-
           let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
             | ambienceFilters.length > 0 | dietFilters.length > 0
 
@@ -666,7 +667,6 @@
         if (selectedCluster.indexOf(name) === -1) {
           d3.select("#" + name)
             .style("stroke", "orange")
-
         }
       }
 
@@ -702,7 +702,7 @@
         } else {
           // current cluster already in list
           selectedCluster.splice(selectedCluster.indexOf(name), 1)
-          currCluster.style("stroke", "black")
+          currCluster.style("stroke", "orange")
 
         }
         let tmp = []
@@ -816,10 +816,11 @@
           .text(d => d.rating + " Stars")
 
         if (sortType === "High Score") {
-          totScore.style("font-weight", "bold");
+          totScore.style("font-weight", "bold")
         }
         if (sortType === "High Rating") {
-          starRate.style("font-weight", "bold");
+          starRate.style("font-weight", "bold")
+
         }
 
         cards.append("p")
