@@ -20,6 +20,13 @@
       flex-direction: row;
     }
 
+    .rowSpecial {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+    }
+
+
     .larger {
       font-size: larger;
     }
@@ -109,7 +116,14 @@
   <h1>Do You Offer Chowda Here?</h1>
 
   <p class="larger">
-    Boston has a plethora of diverse and interesting restaurants in and around the city.
+    <strong class="larger">Boston</strong> has a plethora of diverse and interesting restaurants in and around the city.
+  </p>
+  <p>
+    <em>Each cluster is a neighborhood either in or near Boston. Hover over each cluster to show more details. The
+      number in the cluster represents the number of relevant restaurants based on the filters.</em>
+  </p>
+  <p>
+    <em>For Mac users, use command while you click to select multiple filter options.</em>
   </p>
 
   <br>
@@ -163,6 +177,8 @@
   </div>
 
   <div id="card-holder">
+    <h2>Sort the Restaurants</h2>
+    <p id="selectHoods" class="larger">Looking at neighborhood(s): </p>
     <div class="row head-ops interactable">
       <h2 id="opHS" class="selectedOp">Highest Score</h2>
       <h2 id="opHR">Highest Rating</h2>
@@ -197,6 +213,8 @@
     const requestData = async function () {
       const boston = await d3.csv("yelp_boston.csv");
 
+      let allNames = new Set()
+
       // Category Segments
       let cuisines = [
         "Mexican", "Japanese", "Italian", "American (New)", "Mediterranean",
@@ -223,8 +241,10 @@
       let diets = ["Vegan", "Gluten-Free", "Vegetarian"].sort(d3.ascending)
 
       // Pre-processing the data
+      // Store all original places
+      let uniqueNames = {}
+
       boston.forEach((d) => {
-        // Also some duplicates in data
         // 77 restaurants have no neighborhood
         if (d["neighborhood"] === "") {
           if (JSON.parse(d["location_json"])["city"] !== "Boston") {
@@ -246,6 +266,15 @@
 
           // Review Scores
           d["score"] = d["rating"] * d["review_count"]
+
+          // Track which are duplicates
+          if (d.name in uniqueNames) {
+            d["dupe"] = 1
+          } else {
+            uniqueNames[d.name] = 1
+            d["dupe"] = 0
+          }
+          allNames.add(d["name"])
         }
 
       })
@@ -389,8 +418,6 @@
         "Watertown": chartHeight / 2 - 190 + lift,
       }
 
-      console.log(boston)
-
       // IMPORTANT variables
       let selectedCluster = []
       // colorType can be "Total Score", "Avg Score", "Avg Rating"
@@ -403,7 +430,7 @@
       let dietFilters = []
 
       let subData = boston.filter((d) => {
-        return d.neighborhood !== ""
+        return d.neighborhood !== "" & d.dupe == 0
       })
 
       let totScoreDct = {}
@@ -456,7 +483,6 @@
 
           avgRateDct[Object.keys(totScoreDct)[i]] = totRateDct[Object.keys(totScoreDct)[i]] / avgRateDct[Object.keys(totScoreDct)[i]]
         }
-        console.log(avgRateDct)
 
         // default is Total Score
         let scoreExtent = d3.extent(Object.values(totScoreDct))
@@ -485,7 +511,7 @@
           .domain(scoreExtent)
           .range([boxHeight, 0])
 
-        let leftAxis = d3.axisLeft(legendScale).ticks(6)
+        let leftAxis = d3.axisLeft(legendScale).ticks(6).tickFormat(d3.format(",.2f"))
 
         legend.append("g")
           .attr("class", "legendRemove")
@@ -667,22 +693,26 @@
         }
         let currCluster = d3.select("#" + name)
 
-        if (selectedCluster.length == 0) {
+        let key = Object.keys(hood2Abb).find(k => hood2Abb[k] === name);
+
+        if (selectedCluster.indexOf(name) === -1) {
           currCluster.style("stroke", "red")
 
-          selectedCluster = [name]
+          selectedCluster.push(name)
         } else {
-          if (selectedCluster.indexOf(name) === -1) {
-            d3.select("#" + selectedCluster[0])
-              .style("stroke", "black")
+          // current cluster already in list
+          selectedCluster.splice(selectedCluster.indexOf(name), 1)
+          currCluster.style("stroke", "black")
 
-            currCluster.style("stroke", "red")
-            selectedCluster = [name]
-          } else {
-            selectedCluster = []
-          }
         }
-        console.log("After change", selectedCluster)
+        let tmp = []
+        for (let i = 0; i < selectedCluster.length; i++) {
+          let fullName = Object.keys(hood2Abb).find(k => hood2Abb[k] === selectedCluster[i]);
+          tmp.push(fullName)
+        }
+
+        d3.select("#selectHoods")
+          .text("Looking at neighborhood(s): " + tmp.join(', '))
 
         d3.selectAll("div.remove").remove()
         displayCards()
@@ -715,6 +745,8 @@
         .attr("alignment-baseline", "hanging")
         .attr("x", xPos + (toolTipWidth / 2))
         .attr("y", yPos + 10)
+        .attr("class", "larger")
+        .style("font-weight", "bold");
 
       let relText = toolTip.append("text")
         .attr("fill", "white")
@@ -732,16 +764,14 @@
 
       // Displays relevant places from selected cluster
       function displayCards() {
-        let key = Object.keys(hood2Abb).find(k => hood2Abb[k] === selectedCluster[0]);
-
         let newData = subData.filter((d) => {
           let filterON = cuisineFilters.length > 0 | foodFilters.length > 0
             | ambienceFilters.length > 0 | dietFilters.length > 0
 
           if (filterON) {
-            return d.neighborhood === key & applyFilters(d)
+            return applyHoods(d) & applyFilters(d)
           }
-          return d.neighborhood === key
+          return applyHoods(d)
         })
 
         if (sortType == "High Score") {
@@ -751,9 +781,6 @@
           newData = d3.sort(newData, (a, b) => d3.descending(a.rating, b.rating))
         }
 
-        console.log("Card Data", newData)
-        // ISSUE - cards are not in sort order
-
         let cardDeck = d3.select("#cards")
 
         let cards = cardDeck.selectAll(".card")
@@ -762,8 +789,22 @@
           .append("div")
           .attr("class", "card remove")
 
-        cards.append("h3")
+        let header = cards.append("div")
+          .attr("class", "rowSpecial")
+
+        header.append("h3")
           .text(d => d.name)
+
+        let para = header.append("p")
+          .attr("align-items", "end")
+          .attr("justify-content", "end")
+          .attr("margin-left", 50)
+
+        para.append("a")
+          .text("View in Yelp")
+          .attr("href", d => d.url)
+          .attr("target", "_blank")
+
 
         cards.append("p")
           .text(d => d.categories.join(', '))
@@ -871,7 +912,6 @@
 
       // Updates values in the filters
       function updateFilters(selectID, filterList) {
-        console.log("UPDATE FILTERS")
         let selector = d3.selector = d3.select(selectID)
 
         let selectedOptions = selector.selectAll("option")
@@ -913,6 +953,22 @@
 
         let filterBool = (cuisineBool | foodBool | ambBool | dietBool)
         return filterBool
+      }
+
+      function applyHoods(d) {
+        let tmp = []
+        for (let i = 0; i < selectedCluster.length; i++) {
+          let fullName = Object.keys(hood2Abb).find(k => hood2Abb[k] === selectedCluster[i]);
+          tmp.push(fullName)
+        }
+
+        let hoodBool = false
+        for (let i = 0; i < selectedCluster.length; i++) {
+          hoodBool = hoodBool | d.neighborhood.indexOf(tmp[i]) !== -1
+        }
+
+        return hoodBool
+
       }
 
       // Buttons to change color scale
@@ -958,10 +1014,7 @@
       let opHR = d3.select("#opHR")
 
       opHS.on("click", function () {
-        console.log("CLICKED")
         if (opHS.classed("selectedOp", false)) {
-          console.log("IF")
-
           opHS.classed("selectedOp", true)
           opHR.classed("selectedOp", false)
 
@@ -972,10 +1025,7 @@
       })
 
       opHR.on("click", function () {
-        console.log("CLICKED")
         if (opHR.classed("selectedOp", false)) {
-          console.log("IF")
-
           opHR.classed("selectedOp", true)
           opHS.classed("selectedOp", false)
 
