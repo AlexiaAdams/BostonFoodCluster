@@ -11,9 +11,9 @@
     }
 
     #legend-container {
-      border: 2px solid black;
+      /* border: 2px solid black;
       border-left: none;
-      border-bottom: none;
+      border-bottom: none; */
     }
 
     .row {
@@ -63,6 +63,12 @@
       padding-right: 1%;
       text-align: center;
     }
+
+    /* #textLegend {
+      padding-left: 20%;
+      padding-right: 20%;
+      margin-bottom: none !important;
+    } */
 
     ul {
       list-style-type: none;
@@ -141,14 +147,9 @@
           number in the circle represents the number of relevant restaurants based on the filters.</em>
       </p>
       <p>
-        <em>For Mac users, use command while you click to select multiple filter options.</em>
-      </p>
-      <p>
         <em>Click on a circle and scroll down to view details on the relevant restaurants.</em>
       </p>
-      <p>
-        <em>Score represents the average rating times the number of reviews.</em>
-      </p>
+
     </div>
   </div>
 
@@ -159,6 +160,9 @@
   <div class="row">
     <div id="filter-buttons">
       <h2>Filters</h2>
+      <p>
+        <em>Select multiple options using command click (mac)</em>
+      </p>
       <h3>Cuisines</h3>
       <select multiple id="selectCuisine">
       </select>
@@ -185,6 +189,9 @@
       <div id="legend-text">
         <h2>Boston Cluster Map</h2>
         <p>Select Your Color Scale</p>
+        <p id="textLegend">
+          <em>Score = average rating * number of reviews</em>
+        </p>
         <div class="row">
           <ul id="colorOps">
             <li id="opTS" class="selectedOp">Total Score</li> <!-- The scores summed across the cluster-->
@@ -192,6 +199,8 @@
             <li id="opAR">Average Rating</li> <!-- The ratings averaged across the cluster-->
           </ul>
         </div>
+
+
 
       </div>
       <svg id="legend" width="300" height="600"></svg>
@@ -201,12 +210,12 @@
 
   <div id="card-holder">
     <h2>Sort the Restaurants</h2>
-    <p id="selectHoods" class="larger">Looking at neighborhood(s): </p>
+    <p id="selectHoods" class="larger">Looking at neighborhood(s):</p>
     <div class="row head-ops interactable">
       <h2 id="opHS" class="selectedOp">Highest Score</h2>
       <h2 id="opHR">Highest Rating</h2>
     </div>
-    <p>Here are the relevant restaurants sorted by highest score!</p>
+    <p id="sortInfo">Here are the relevant restaurants sorted by highest score!</p>
     <div id="cards">
 
     </div>
@@ -734,6 +743,7 @@
         d3.select("#selectHoods")
           .text("Looking at neighborhood(s): " + tmp.join(', '))
 
+
         d3.selectAll("div.remove").remove()
         displayCards()
 
@@ -835,6 +845,7 @@
           return applyHoods(d)
         })
 
+
         if (sortType == "High Score") {
           newData = d3.sort(newData, (a, b) => d3.descending(a.score, b.score))
         }
@@ -882,7 +893,6 @@
         }
         if (sortType === "High Rating") {
           starRate.style("font-weight", "bold")
-
         }
 
         cards.append("p")
@@ -892,6 +902,7 @@
           .text(d => JSON.parse(d["location_json"])["display_address"].join(', '))
 
       }
+      displayCards()
 
       // Dropdown/MultiSelect Menus
       let cuiDrop = d3.select("#selectCuisine")
@@ -970,7 +981,6 @@
         updateMap()
         d3.selectAll("div.remove").remove()
         displayCards()
-
       }
 
       // Updates values in the filters
@@ -1090,6 +1100,9 @@
           opHR.classed("selectedOp", false)
 
           sortType = "High Score"
+          d3.select("#sortInfo")
+            .text("Here are the relevant restaurants sorted by highest score!")
+
           d3.selectAll("div.remove").remove()
           displayCards()
         }
@@ -1101,6 +1114,9 @@
           opHS.classed("selectedOp", false)
 
           sortType = "High Rating"
+          d3.select("#sortInfo")
+            .text("Here are the relevant restaurants sorted by highest rating!")
+
           d3.selectAll("div.remove").remove()
           displayCards()
         }
