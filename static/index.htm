@@ -12,7 +12,8 @@
 
     #legend-container {
       border: 2px solid black;
-      border-left: none
+      border-left: none;
+      border-bottom: none;
     }
 
     .row {
@@ -26,6 +27,13 @@
       justify-content: space-between;
     }
 
+    .header div {
+      width: 50%;
+      background-color: #DFBC1e;
+      /* color: white; */
+      padding: 2%;
+      border-radius: 10px;
+    }
 
     .larger {
       font-size: larger;
@@ -44,6 +52,10 @@
     #showAmbiences,
     #showDiets {
       width: 350px;
+    }
+
+    #selectDiet {
+      height: 54px;
     }
 
     #legend-text {
@@ -113,25 +125,60 @@
 </head>
 
 <body>
-  <h1>Do You Offer Chowda Here?</h1>
+  <div class="row header">
 
-  <p class="larger">
-    <strong class="larger">Boston</strong> has a plethora of diverse and interesting restaurants in and around the city.
-  </p>
-  <p>
-    <em>Each circle is a neighborhood either in or near Boston. Hover over each circle to show more details. The
-      number in the circle represents the number of relevant restaurants based on the filters.</em>
-  </p>
-  <p>
-    <em>For Mac users, use command while you click to select multiple filter options.</em>
-  </p>
-  <p>
-    <em>Click on a circle and scroll down to view details on the relevant restaurants.</em>
-  </p>
+    <div>
+      <h1>Do You Offer Chowda Here?</h1>
+
+      <p class="larger">
+        <strong class="larger">Boston</strong> has a plethora of diverse and interesting restaurants in and around the
+        city.
+      </p>
+    </div>
+    <div>
+      <p>
+        <em>Each circle is a neighborhood either in or near Boston. Hover over each circle to show more details. The
+          number in the circle represents the number of relevant restaurants based on the filters.</em>
+      </p>
+      <p>
+        <em>For Mac users, use command while you click to select multiple filter options.</em>
+      </p>
+      <p>
+        <em>Click on a circle and scroll down to view details on the relevant restaurants.</em>
+      </p>
+      <p>
+        <em>Score represents the average rating times the number of reviews.</em>
+      </p>
+    </div>
+  </div>
+
+
 
   <br>
 
   <div class="row">
+    <div id="filter-buttons">
+      <h2>Filters</h2>
+      <h3>Cuisines</h3>
+      <select multiple id="selectCuisine">
+      </select>
+      <p id="showCuisines">Selected: </p>
+
+      <h3>Food</h3>
+      <select multiple id="selectFood">
+      </select>
+      <p id="showFoods">Selected: </p>
+
+      <h3>Ambience</h3>
+      <select multiple id="selectAmbience">
+      </select>
+      <p id="showAmbiences">Selected: </p>
+
+      <h3>Dietary Restrictions</h3>
+      <select multiple id="selectDiet">
+      </select>
+      <p id="showDiets">Selected: </p>
+    </div>
     <svg id="map" width="700" height="800"></svg>
 
     <div id="legend-container">
@@ -150,33 +197,6 @@
       <svg id="legend" width="300" height="600"></svg>
     </div>
 
-    <div id="filter-buttons">
-      <!-- <div>
-        <p>Reset All</p>
-      </div> -->
-      <h3>Cuisines</h3>
-      <select multiple id="selectCuisine">
-      </select>
-      <p id="showCuisines">Selected: </p>
-      <!-- <br> -->
-
-      <h3>Food</h3>
-      <select multiple id="selectFood">
-      </select>
-      <p id="showFoods">Selected: </p>
-      <!-- <br> -->
-
-      <h3>Ambience</h3>
-      <select multiple id="selectAmbience">
-      </select>
-      <p id="showAmbiences">Selected: </p>
-      <!-- <br> -->
-
-      <h3>Dietary Restrictions</h3>
-      <select multiple id="selectDiet">
-      </select>
-      <p id="showDiets">Selected: </p>
-    </div>
   </div>
 
   <div id="card-holder">
@@ -716,6 +736,8 @@
 
         d3.selectAll("div.remove").remove()
         displayCards()
+
+        notifyUser()
       }
 
       // Tooltip
@@ -762,6 +784,45 @@
         .attr("x", xPos + (toolTipWidth / 2))
         .attr("y", yPos + 70)
 
+      // Notification Message
+      let notif = mapChart.append("g")
+        .attr("class", "message")
+        .attr("visibility", "hidden")
+
+      let xMess = chartWidth / 2 - 50
+      let yMess = chartHeight * 3 / 4 + 50
+
+      notif.append("rect")
+        .attr("fill", "black")
+        .attr("opacity", .8)
+        .attr("rx", 6)
+        .attr("ry", 6)
+        .attr("x", xMess)
+        .attr("y", yMess)
+        .attr("width", toolTipWidth)
+        .attr("height", toolTipHeight);
+
+      notif.append("text")
+        .text("Scroll Down")
+        .attr("fill", "white")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", xMess + (toolTipWidth / 2))
+        .attr("y", yMess + 20)
+        .attr("class", "larger")
+        .style("font-weight", "bold");
+
+      notif.append("text")
+        .text("To View Restaurants")
+        .attr("fill", "white")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", xMess + (toolTipWidth / 2))
+        .attr("y", yMess + 50)
+        .attr("class", "larger")
+        .style("font-weight", "bold");
+
+
       // Displays relevant places from selected cluster
       function displayCards() {
         let newData = subData.filter((d) => {
@@ -805,12 +866,13 @@
           .attr("href", d => d.url)
           .attr("target", "_blank")
 
-
         cards.append("p")
           .text(d => d.categories.join(', '))
 
+        let format = d3.format(",.2f")
+
         let totScore = cards.append("p")
-          .text(d => "Total Score: " + d.score)
+          .text(d => "Total Score: " + format(d.score))
 
         let starRate = cards.append("p")
           .text(d => d.rating + " Stars")
@@ -970,6 +1032,14 @@
 
         return hoodBool
 
+      }
+
+      function notifyUser() {
+        if (selectedCluster.length > 0) {
+          notif.attr("visibility", "visible")
+        } else {
+          notif.attr("visibility", "hidden")
+        }
       }
 
       // Buttons to change color scale
